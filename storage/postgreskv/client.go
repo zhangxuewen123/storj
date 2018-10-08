@@ -46,7 +46,7 @@ func (client *Client) Put(key storage.Key, value storage.Value) error {
 	return client.PutPath(storage.Key(defaultBucket), key, value)
 }
 
-// Put sets the value for the provided key (in the given bucket).
+// PutPath sets the value for the provided key (in the given bucket).
 func (client *Client) PutPath(bucket, key storage.Key, value storage.Value) error {
 	if key.IsZero() {
 		return Error.New("invalid key")
@@ -65,7 +65,7 @@ func (client *Client) Get(key storage.Key) (storage.Value, error) {
 	return client.GetPath(storage.Key(defaultBucket), key)
 }
 
-// Get looks up the provided key (in the given bucket) and returns its value (or an error).
+// GetPath looks up the provided key (in the given bucket) and returns its value (or an error).
 func (client *Client) GetPath(bucket, key storage.Key) (storage.Value, error) {
 	q := "SELECT metadata FROM pathdata WHERE bucket = $1::BYTEA AND fullpath = $2::BYTEA"
 	row := client.pgConn.QueryRow(q, []byte(bucket), []byte(key))
@@ -85,7 +85,7 @@ func (client *Client) Delete(key storage.Key) error {
 	return client.DeletePath(storage.Key(defaultBucket), key)
 }
 
-// Delete deletes the given key (in the given bucket) and its associated value.
+// DeletePath deletes the given key (in the given bucket) and its associated value.
 func (client *Client) DeletePath(bucket, key storage.Key) error {
 	q := "DELETE FROM pathdata WHERE bucket = $1::BYTEA AND fullpath = $2::BYTEA"
 	result, err := client.pgConn.Exec(q, []byte(bucket), []byte(key))
@@ -124,6 +124,9 @@ func (client *Client) GetAll(keys storage.Keys) (storage.Values, error) {
 	return client.GetAllPath(storage.Key(defaultBucket), keys)
 }
 
+// GetAllPath finds all values for the provided keys, up to 100 keys
+// (in the given bucket). if more keys are provided than the maximum an
+// error will be returned.
 func (client *Client) GetAllPath(bucket storage.Key, keys storage.Keys) (storage.Values, error) {
 	if len(keys) > storage.LookupLimit {
 		return nil, storage.ErrLimitExceeded
@@ -145,17 +148,17 @@ func (client *Client) GetAllPath(bucket storage.Key, keys storage.Keys) (storage
 	for rows.Next() {
 		var value []byte
 		if err := rows.Scan(&value); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return nil, errs.Wrap(err)
 		}
 		values = append(values, storage.Value(value))
 	}
-	rows.Close()
+	_ = rows.Close()
 
 	return values, nil
 }
 
-type OrderedPostgresIterator struct {
+type orderedPostgresIterator struct {
 	client         *Client
 	opts           *storage.IterateOptions
 	bucket         storage.Key
@@ -167,9 +170,10 @@ type OrderedPostgresIterator struct {
 	errEncountered error
 }
 
-func (opi *OrderedPostgresIterator) Next(item *storage.ListItem) bool {
+// Next fills in info for the next item in an ongoing listing.
+func (opi *orderedPostgresIterator) Next(item *storage.ListItem) bool {
 	if !opi.curRows.Next() {
-		opi.curRows.Close()
+		_ = opi.curRows.Close()
 		if opi.curIndex < opi.batchSize {
 			return false
 		}
@@ -185,7 +189,7 @@ func (opi *OrderedPostgresIterator) Next(item *storage.ListItem) bool {
 		opi.curRows = newRows
 		opi.curIndex = 0
 		if !opi.curRows.Next() {
-			opi.curRows.Close()
+			_ = opi.curRows.Close()
 			return false
 		}
 	}
@@ -193,12 +197,12 @@ func (opi *OrderedPostgresIterator) Next(item *storage.ListItem) bool {
 	err := opi.curRows.Scan(&k, &v)
 	if err != nil {
 		opi.errEncountered = errs.Wrap(err)
-		opi.curRows.Close()
+		_ = opi.curRows.Close()
 		return false
 	}
 	item.Key = storage.Key(k)
 	item.Value = storage.Value(v)
-	opi.curIndex += 1
+	opi.curIndex++
 	if opi.curIndex == 0 && opi.lastKeySeen.Equal(item.Key) {
 		return opi.Next(item)
 	}
@@ -213,7 +217,7 @@ func (opi *OrderedPostgresIterator) Next(item *storage.ListItem) bool {
 	return true
 }
 
-func (opi *OrderedPostgresIterator) nextQuery() (*sql.Rows, error) {
+func (opi *orderedPostgresIterator) nextQuery() (*sql.Rows, error) {
 	start := opi.lastKeySeen
 	if start == nil {
 		start = opi.opts.First
@@ -226,11 +230,11 @@ func (opi *OrderedPostgresIterator) nextQuery() (*sql.Rows, error) {
 			query = "SELECT p, m FROM list_directory($1::BYTEA, $2::BYTEA, $3::BYTEA, $4) ld(p, m)"
 		}
 	} else {
-		start_cmp := ">="
-		order_dir := ""
+		startCmp := ">="
+		orderDir := ""
 		if opi.opts.Reverse {
-			start_cmp = "<="
-			order_dir = " DESC"
+			startCmp = "<="
+			orderDir = " DESC"
 		}
 		query = fmt.Sprintf(`
 			SELECT fullpath, metadata
@@ -241,7 +245,7 @@ func (opi *OrderedPostgresIterator) nextQuery() (*sql.Rows, error) {
 			   AND ($3::BYTEA = ''::BYTEA OR fullpath %s $3::BYTEA)
 			 ORDER BY fullpath%s
 			 LIMIT $4
-		`, start_cmp, order_dir)
+		`, startCmp, orderDir)
 	}
 	return opi.client.pgConn.Query(query, []byte(opi.bucket), []byte(opi.opts.Prefix), []byte(start), opi.batchSize)
 }
@@ -254,7 +258,7 @@ func (client *Client) Iterate(opts storage.IterateOptions, fn func(storage.Itera
 	if opts.First == nil {
 		opts.First = storage.Key("")
 	}
-	opi := &OrderedPostgresIterator{
+	opi := &orderedPostgresIterator{
 		client:    client,
 		opts:      &opts,
 		bucket:    storage.Key(defaultBucket),
@@ -269,7 +273,7 @@ func (client *Client) Iterate(opts storage.IterateOptions, fn func(storage.Itera
 	opi.curRows = newRows
 	err = fn(opi)
 	if err != nil {
-		opi.curRows.Close()
+		_ = opi.curRows.Close()
 		return err
 	}
 	return opi.errEncountered

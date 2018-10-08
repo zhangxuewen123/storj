@@ -8,12 +8,18 @@ package schema
 import (
 	"database/sql"
 
+	// this isn't strictly necessary to import, but we just need the go-bindata
+	// binary for the above generate, and go mod tidy wants to remove
+	// go-bindata because nothing else is importing it. better solutions?
 	_ "github.com/go-bindata/go-bindata"
+
 	"github.com/golang-migrate/migrate/v3"
 	"github.com/golang-migrate/migrate/v3/database/postgres"
 	"github.com/golang-migrate/migrate/v3/source/go_bindata"
 )
 
+// PrepareDB applies schema migrations as necessary to the given database to
+// get it up to date.
 func PrepareDB(db *sql.DB) error {
 	srcDriver, err := bindata.WithInstance(bindata.Resource(AssetNames(),
 		func(name string) ([]byte, error) {
