@@ -11,7 +11,7 @@ import (
 	"github.com/zeebo/errs"
 
 	"storj.io/storj/storage"
-	"storj.io/storj/storage/postgreskv/schema_migrations"
+	"storj.io/storj/storage/postgreskv/schema"
 )
 
 const (
@@ -31,7 +31,7 @@ func New(dbURL string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = schema_migrations.PrepareDB(pgConn)
+	err = schema.PrepareDB(pgConn)
 	if err != nil {
 		return nil, err
 	}

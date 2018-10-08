@@ -1,9 +1,9 @@
 // Copyright (C) 2018 Storj Labs, Inc.
 // See LICENSE for copying information.
 
-//go:generate go-bindata -o data.go -pkg schema_migrations -ignore ".*go" .
+//go:generate go-bindata -o data.go -pkg schema -ignore ".*go" .
 
-package schema_migrations
+package schema
 
 import (
 	"database/sql"
