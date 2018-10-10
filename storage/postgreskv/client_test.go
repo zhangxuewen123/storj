@@ -13,7 +13,7 @@ import (
 )
 
 func TestSuite(t *testing.T) {
-	store, err := New("postgres://pointerdb:pointerdb@localhost/pointerdb?search_path=pointerdb")
+	store, err := New("postgres://pointerdb:pg-secret-pass@test-postgres-pointerdb/pointerdb?sslmode=disable")
 	if err != nil {
 		t.Fatalf("failed to open db: %v", err)
 	}
@@ -28,7 +28,7 @@ func TestSuite(t *testing.T) {
 }
 
 func BenchmarkSuite(b *testing.B) {
-	store, err := New("postgres://pointerdb:pointerdb@localhost/pointerdb?search_path=pointerdb")
+	store, err := New("postgres://pointerdb:pg-secret-pass@test-postgres-pointerdb/pointerdb?sslmode=disable")
 	if err != nil {
 		b.Fatalf("failed to open db: %v", err)
 	}
