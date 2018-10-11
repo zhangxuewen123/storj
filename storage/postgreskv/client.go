@@ -11,6 +11,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/zeebo/errs"
 
+	"storj.io/storj/pkg/utils"
 	"storj.io/storj/storage"
 	"storj.io/storj/storage/postgreskv/schema"
 )
@@ -149,14 +150,16 @@ func (client *Client) GetAllPath(bucket storage.Key, keys storage.Keys) (storage
 	for rows.Next() {
 		var value []byte
 		if err := rows.Scan(&value); err != nil {
-			_ = rows.Close()
+			if err2 := rows.Close(); err2 != nil {
+				err = utils.CombineErrors(err, err2)
+			}
 			return nil, errs.Wrap(err)
 		}
 		values = append(values, storage.Value(value))
 	}
-	_ = rows.Close()
+	err = rows.Close()
 
-	return values, nil
+	return values, err
 }
 
 type orderedPostgresIterator struct {
@@ -174,7 +177,10 @@ type orderedPostgresIterator struct {
 // Next fills in info for the next item in an ongoing listing.
 func (opi *orderedPostgresIterator) Next(item *storage.ListItem) bool {
 	if !opi.curRows.Next() {
-		_ = opi.curRows.Close()
+		if err := opi.curRows.Close(); err != nil {
+			opi.errEncountered = errs.Wrap(err)
+			return false
+		}
 		if opi.curIndex < opi.batchSize {
 			return false
 		}
@@ -190,15 +196,19 @@ func (opi *orderedPostgresIterator) Next(item *storage.ListItem) bool {
 		opi.curRows = newRows
 		opi.curIndex = 0
 		if !opi.curRows.Next() {
-			_ = opi.curRows.Close()
+			if err := opi.curRows.Close(); err != nil {
+				opi.errEncountered = errs.Wrap(err)
+			}
 			return false
 		}
 	}
 	var k, v []byte
 	err := opi.curRows.Scan(&k, &v)
 	if err != nil {
+		if err2 := opi.curRows.Close(); err2 != nil {
+			err = utils.CombineErrors(err, err2)
+		}
 		opi.errEncountered = errs.Wrap(err)
-		_ = opi.curRows.Close()
 		return false
 	}
 	item.Key = storage.Key(k)
@@ -274,7 +284,9 @@ func (client *Client) Iterate(opts storage.IterateOptions, fn func(storage.Itera
 	opi.curRows = newRows
 	err = fn(opi)
 	if err != nil {
-		_ = opi.curRows.Close()
+		if err2 := opi.curRows.Close(); err2 != nil {
+			err = utils.CombineErrors(err, err2)
+		}
 		return err
 	}
 	return opi.errEncountered
