@@ -4,6 +4,7 @@
 package postgreskv
 
 import (
+	"flag"
 	"testing"
 
 	"go.uber.org/zap/zaptest"
@@ -12,31 +13,43 @@ import (
 	"storj.io/storj/storage/testsuite"
 )
 
-func TestSuite(t *testing.T) {
-	store, err := New("postgres://pointerdb:pg-secret-pass@test-postgres-pointerdb/pointerdb?sslmode=disable")
-	if err != nil {
-		t.Fatalf("failed to open db: %v", err)
+const (
+	// this connstring is expected to work under the storj-test docker-compose instance
+	defaultPostgresConn = "postgres://pointerdb:pg-secret-pass@test-postgres-pointerdb/pointerdb?sslmode=disable"
+)
+
+var (
+	testPostgres = flag.String("postgres-test-db", defaultPostgresConn, "postgres test database connection string")
+)
+
+func newTestPostgres(t testing.TB) (store *Client, cleanup func()) {
+	if *testPostgres == "" {
+		t.Skip(`postgres flag missing, example:` + "\n" + defaultPostgresConn)
 	}
-	defer func() {
-		if err := store.Close(); err != nil {
+
+	pgdb, err := New(*testPostgres)
+	if err != nil {
+		t.Fatalf("init: %v", err)
+	}
+
+	return pgdb, func() {
+		if err := pgdb.Close(); err != nil {
 			t.Fatalf("failed to close db: %v", err)
 		}
-	}()
+	}
+}
+
+func TestSuite(t *testing.T) {
+	store, cleanup := newTestPostgres(t)
+	defer cleanup()
 
 	zap := zaptest.NewLogger(t)
 	testsuite.RunTests(t, storelogger.New(zap, store))
 }
 
 func BenchmarkSuite(b *testing.B) {
-	store, err := New("postgres://pointerdb:pg-secret-pass@test-postgres-pointerdb/pointerdb?sslmode=disable")
-	if err != nil {
-		b.Fatalf("failed to open db: %v", err)
-	}
-	defer func() {
-		if err := store.Close(); err != nil {
-			b.Fatalf("failed to close db: %v", err)
-		}
-	}()
+	store, cleanup := newTestPostgres(b)
+	defer cleanup()
 
 	testsuite.RunBenchmarks(b, store)
 }
