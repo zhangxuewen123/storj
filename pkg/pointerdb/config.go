@@ -32,7 +32,7 @@ type Config struct {
 	Overlay              bool   `default:"false" help:"toggle flag if overlay is enabled"`
 }
 
-func setupKVDriver(dbURLString string) (db storage.KeyValueStore, err error) {
+func newKeyValueStore(dbURLString string) (db storage.KeyValueStore, err error) {
 	dburl, err := utils.ParseURL(dbURLString)
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func setupKVDriver(dbURLString string) (db storage.KeyValueStore, err error) {
 
 // Run implements the provider.Responsibility interface
 func (c Config) Run(ctx context.Context, server *provider.Provider) error {
-	db, err := setupKVDriver(c.DatabaseURL)
+	db, err := newKeyValueStore(c.DatabaseURL)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,5 @@
 // Copyright (C) 2018 Storj Labs, Inc.
+
 // See LICENSE for copying information.
 
 package postgreskv
@@ -118,15 +119,15 @@ func (client *Client) Close() error {
 	return client.pgConn.Close()
 }
 
-// GetAll finds all values for the provided keys up to 100 keys
-// if more keys are provided than the maximum an error will be returned.
+// GetAll finds all values for the provided keys (up to storage.LookupLimit).
+// If more keys are provided than the maximum, an error will be returned.
 func (client *Client) GetAll(keys storage.Keys) (storage.Values, error) {
 	return client.GetAllPath(storage.Key(defaultBucket), keys)
 }
 
-// GetAllPath finds all values for the provided keys, up to 100 keys
-// (in the given bucket). if more keys are provided than the maximum an
-// error will be returned.
+// GetAllPath finds all values for the provided keys (up to storage.LookupLimit)
+// in the given bucket. if more keys are provided than the maximum, an error
+// will be returned.
 func (client *Client) GetAllPath(bucket storage.Key, keys storage.Keys) (storage.Values, error) {
 	if len(keys) > storage.LookupLimit {
 		return nil, storage.ErrLimitExceeded
