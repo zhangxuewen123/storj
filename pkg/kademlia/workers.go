@@ -4,10 +4,8 @@
 package kademlia
 
 import (
-	"container/heap"
 	"context"
 	"log"
-	"math/big"
 	"sync"
 	"time"
 
@@ -30,7 +28,7 @@ var (
 // worker pops work off a priority queue and does lookups on the work received
 type worker struct {
 	contacted      map[string]bool
-	pq             PriorityQueue
+	pq             XorQueue
 	mu             *sync.Mutex
 	maxResponse    time.Duration
 	cancel         context.CancelFunc
@@ -41,27 +39,9 @@ type worker struct {
 }
 
 func newWorker(ctx context.Context, rt *RoutingTable, nodes []*pb.Node, nc node.Client, target dht.NodeID, k int) *worker {
-	t := new(big.Int).SetBytes(target.Bytes())
-
-	pq := func(nodes []*pb.Node) PriorityQueue {
-		pq := make(PriorityQueue, len(nodes))
-		for i, node := range nodes {
-			bnode := new(big.Int).SetBytes([]byte(node.GetId()))
-			pq[i] = &Item{
-				value:    node,
-				priority: new(big.Int).Xor(t, bnode),
-				index:    i,
-			}
-
-		}
-		heap.Init(&pq)
-
-		return pq
-	}(nodes)
-
 	return &worker{
 		contacted:      map[string]bool{},
-		pq:             pq,
+		pq:             NewXorQueue(nodes, target),
 		mu:             &sync.Mutex{},
 		maxResponse:    0 * time.Millisecond,
 		nodeClient:     nc,
@@ -123,7 +103,8 @@ func (w *worker) getWork(ctx context.Context, ch chan *pb.Node) {
 		}
 
 		w.workInProgress++
-		ch <- w.pq.Pop().(*Item).value
+		node, _ := w.pq.PopClosest()
+		ch <- node
 		w.mu.Unlock()
 	}
 
@@ -157,8 +138,6 @@ func (w *worker) lookup(ctx context.Context, node *pb.Node) []*pb.Node {
 }
 
 func (w *worker) update(nodes []*pb.Node) {
-	t := new(big.Int).SetBytes(w.find.Bytes())
-
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -167,34 +146,13 @@ func (w *worker) update(nodes []*pb.Node) {
 		if w.contacted[v.GetId()] {
 			continue
 		}
-		heap.Push(&w.pq, &Item{
-			value:    v,
-			priority: new(big.Int).Xor(t, new(big.Int).SetBytes(w.find.Bytes())),
-		})
+		w.pq.Insert(v, w.find)
 	}
 
-	// reinitialize heap
-	heap.Init(&w.pq)
-
-	// only keep the k closest nodes
-	if len(w.pq) <= w.k {
-		w.workInProgress--
-		return
+	// resize if we got too big.  keep the k closest nodes
+	if w.pq.Len() > w.k {
+		w.pq.Resize(w.k)
 	}
-
-	pq := PriorityQueue{}
-	for i := 0; i < w.k; i++ {
-		if len(w.pq) > 0 {
-			item := heap.Pop(&w.pq)
-			heap.Push(&pq, item)
-		}
-	}
-
-	// reinitialize heap
-	heap.Init(&pq)
-	// set w.pq to the new pq with the k closest nodes
-	w.pq = pq
-
 	w.workInProgress--
 }
 
