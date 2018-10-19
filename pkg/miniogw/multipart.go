@@ -5,7 +5,10 @@ package miniogw
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"log"
+	"runtime"
 	"sort"
 	"strconv"
 	"sync"
@@ -22,9 +25,11 @@ import (
 func (s *storjObjects) NewMultipartUpload(ctx context.Context, bucket, object string, metadata map[string]string) (uploadID string, err error) {
 	defer mon.Task()(&ctx)(&err)
 
+	multipartCtx, cancel := context.WithCancel(context.Background())
+
 	uploads := s.storj.multipart
 
-	upload, err := uploads.Create(bucket, object, metadata)
+	upload, err := uploads.Create(cancel, bucket, object, metadata)
 	if err != nil {
 		return "", err
 	}
@@ -49,7 +54,7 @@ func (s *storjObjects) NewMultipartUpload(ctx context.Context, bucket, object st
 			UserDefined: metadata,
 		}
 
-		result, err := objectStore.Put(ctx, paths.New(object), upload.Stream, serMetaInfo, expTime)
+		result, err := objectStore.Put(multipartCtx, paths.New(object), upload.Stream, serMetaInfo, expTime)
 		uploads.RemoveByID(upload.ID)
 
 		if err != nil {
@@ -109,8 +114,12 @@ func (s *storjObjects) AbortMultipartUpload(ctx context.Context, bucket, object,
 
 	upload, err := uploads.Remove(bucket, object, uploadID)
 	if err != nil {
+		debug("ewrror while removing")
 		return err
 	}
+
+	debug("about to run cancel()")
+	upload.Cancel()
 
 	errAbort := Error.New("abort")
 	upload.Stream.Abort(errAbort)
@@ -196,7 +205,7 @@ func NewMultipartUploads() *MultipartUploads {
 }
 
 // Create creates a new upload
-func (uploads *MultipartUploads) Create(bucket, object string, metadata map[string]string) (*MultipartUpload, error) {
+func (uploads *MultipartUploads) Create(cancel func(), bucket, object string, metadata map[string]string) (*MultipartUpload, error) {
 	uploads.mu.Lock()
 	defer uploads.mu.Unlock()
 
@@ -210,7 +219,7 @@ func (uploads *MultipartUploads) Create(bucket, object string, metadata map[stri
 	uploads.lastID++
 	uploadID := "Upload" + strconv.Itoa(uploads.lastID)
 
-	upload := NewMultipartUpload(uploadID, bucket, object, metadata)
+	upload := NewMultipartUpload(cancel, uploadID, bucket, object, metadata)
 	uploads.pending[uploadID] = upload
 
 	return upload, nil
@@ -265,6 +274,7 @@ type MultipartUpload struct {
 	Metadata map[string]string
 	Done     chan (*MultipartUploadResult)
 	Stream   *MultipartStream
+	Cancel   func()
 
 	mu        sync.Mutex
 	completed []minio.PartInfo
@@ -277,7 +287,7 @@ type MultipartUploadResult struct {
 }
 
 // NewMultipartUpload creates a new MultipartUpload
-func NewMultipartUpload(uploadID string, bucket, object string, metadata map[string]string) *MultipartUpload {
+func NewMultipartUpload(cancel func(), uploadID string, bucket, object string, metadata map[string]string) *MultipartUpload {
 	upload := &MultipartUpload{
 		ID:       uploadID,
 		Bucket:   bucket,
@@ -285,6 +295,7 @@ func NewMultipartUpload(uploadID string, bucket, object string, metadata map[str
 		Metadata: metadata,
 		Done:     make(chan *MultipartUploadResult, 1),
 		Stream:   NewMultipartStream(),
+		Cancel:   cancel,
 	}
 	return upload
 }
@@ -455,4 +466,12 @@ func (stream *MultipartStream) AddPart(partID int, data *hash.Reader) (*StreamPa
 	stream.moreParts.Broadcast()
 
 	return part, nil
+}
+
+// debug prints a debug information to the log with file and line.
+func debug(format string, a ...interface{}) {
+	_, file, line, _ := runtime.Caller(1)
+	info := fmt.Sprintf(format, a...)
+
+	log.Printf("[STORJ -->>] debug %s:%d %v\n", file, line, info)
 }

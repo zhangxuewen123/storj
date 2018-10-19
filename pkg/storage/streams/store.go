@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
+	"runtime"
 	"time"
 
 	proto "github.com/gogo/protobuf/proto"
@@ -113,6 +115,8 @@ func (s *streamStore) Put(ctx context.Context, path paths.Path, data io.Reader, 
 	defer func() {
 		select {
 		case <-ctx.Done():
+			debug("Received the multipart cancel")
+			zap.S().Warnf("REceived the multipart cancel")
 			s.cancelHandler(context.Background(), currentSegment, path)
 		default:
 		}
@@ -672,4 +676,12 @@ func decryptStreamInfo(ctx context.Context, item segments.Meta, path paths.Path,
 
 	// decrypt metadata with the content encryption key and zero nonce
 	return cipher.Decrypt(streamMeta.EncryptedStreamInfo, &contentKey, &encryption.Nonce{})
+}
+
+// debug prints a debug information to the log with file and line.
+func debug(format string, a ...interface{}) {
+	_, file, line, _ := runtime.Caller(1)
+	info := fmt.Sprintf(format, a...)
+
+	log.Printf("[STORJ -->>] debug %s:%d %v\n", file, line, info)
 }
