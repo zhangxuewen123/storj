@@ -6,15 +6,18 @@ package provider
 import (
 	"context"
 	"crypto"
-	"crypto/tls"
+	"crypto/ecdsa"
+	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"math/bits"
 	"net"
 	"os"
 
+	"github.com/bifurcation/mint"
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
@@ -22,6 +25,7 @@ import (
 	"google.golang.org/grpc/peer"
 
 	"storj.io/storj/pkg/peertls"
+	"storj.io/storj/pkg/transport/tls13"
 	"storj.io/storj/pkg/utils"
 )
 
@@ -138,17 +142,39 @@ func PeerIdentityFromCerts(leaf, ca *x509.Certificate) (*PeerIdentity, error) {
 
 // PeerIdentityFromPeer loads a PeerIdentity from a peer connection
 func PeerIdentityFromPeer(peer *peer.Peer) (*PeerIdentity, error) {
-	tlsInfo := peer.AuthInfo.(credentials.TLSInfo)
-	c := tlsInfo.State.PeerCertificates
-	if len(c) < 2 {
-		return nil, Error.New("invalid certificate chain")
-	}
-	pi, err := PeerIdentityFromCerts(c[0], c[1])
-	if err != nil {
-		return nil, err
+	{
+		tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
+		if ok {
+			c := tlsInfo.State.PeerCertificates
+			if len(c) < 2 {
+				return nil, Error.New("invalid certificate chain")
+			}
+			// TODO: ensure that the order and CA-s are actually ordered
+			pi, err := PeerIdentityFromCerts(c[0], c[1])
+			if err != nil {
+				return nil, err
+			}
+			return pi, nil
+		}
 	}
 
-	return pi, nil
+	{
+		tlsInfo, ok := peer.AuthInfo.(tls13.TLSInfo)
+		if ok {
+			c := tlsInfo.State.PeerCertificates
+			if len(c) < 2 {
+				return nil, Error.New("invalid certificate chain")
+			}
+			// TODO: ensure that the order and CA-s are actually ordered
+			pi, err := PeerIdentityFromCerts(c[0], c[1])
+			if err != nil {
+				return nil, err
+			}
+			return pi, nil
+		}
+	}
+
+	return nil, Error.New("Unknown AuthInfo")
 }
 
 // PeerIdentityFromContext loads a PeerIdentity from a ctx TLS credentials
@@ -249,45 +275,79 @@ func (ic IdentityConfig) Run(ctx context.Context, interceptor grpc.UnaryServerIn
 	return s.Run(ctx)
 }
 
+func privateKeyToSigner(pkey crypto.PrivateKey) crypto.Signer {
+	switch key := pkey.(type) {
+	case *rsa.PrivateKey:
+		return key
+	case *ecdsa.PrivateKey:
+		return key
+	}
+	return nil
+}
+
 // ServerOption returns a grpc `ServerOption` for incoming connections
 // to the node with this full identity
 func (fi *FullIdentity) ServerOption() (grpc.ServerOption, error) {
 	ch := [][]byte{fi.Leaf.Raw, fi.CA.Raw}
-	c, err := peertls.TLSCert(ch, fi.Leaf, fi.Key)
+	tlsCert, err := peertls.TLSCert(ch, fi.Leaf, fi.Key)
 	if err != nil {
 		return nil, err
 	}
 
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{*c},
-		InsecureSkipVerify: true,
-		ClientAuth:         tls.RequireAnyClientCert,
-		VerifyPeerCertificate: peertls.VerifyPeerFunc(
-			peertls.VerifyPeerCertChains,
-		),
+	cert := &mint.Certificate{
+		Chain:      []*x509.Certificate{fi.Leaf, fi.CA},
+		PrivateKey: privateKeyToSigner(tlsCert.PrivateKey),
+	}
+	if cert.PrivateKey == nil {
+		return nil, errors.New("unknown private key")
 	}
 
-	return grpc.Creds(credentials.NewTLS(tlsConfig)), nil
+	// TODO: check PrivateKey
+
+	tlsConfig := &mint.Config{
+		Certificates:          []*mint.Certificate{cert},
+		InsecureSkipVerify:    true,
+		RequireClientAuth:     true,
+		AllowEarlyData:        true,
+		VerifyPeerCertificate: peertls.VerifyPeerFunc(peertls.VerifyPeerCertChains),
+	}
+	if err := tlsConfig.Init(false); err != nil {
+		return nil, err
+	}
+
+	return grpc.Creds(tls13.NewCredentials(tlsConfig)), nil
 }
 
 // DialOption returns a grpc `DialOption` for making outgoing connections
 // to the node with this peer identity
 func (fi *FullIdentity) DialOption() (grpc.DialOption, error) {
 	ch := [][]byte{fi.Leaf.Raw, fi.CA.Raw}
-	c, err := peertls.TLSCert(ch, fi.Leaf, fi.Key)
+
+	tlsCert, err := peertls.TLSCert(ch, fi.Leaf, fi.Key)
 	if err != nil {
 		return nil, err
 	}
 
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{*c},
-		InsecureSkipVerify: true,
-		VerifyPeerCertificate: peertls.VerifyPeerFunc(
-			peertls.VerifyPeerCertChains,
-		),
+	cert := &mint.Certificate{
+		Chain:      []*x509.Certificate{fi.Leaf, fi.CA},
+		PrivateKey: privateKeyToSigner(tlsCert.PrivateKey),
+	}
+	if cert.PrivateKey == nil {
+		return nil, errors.New("unknown private key")
 	}
 
-	return grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)), nil
+	tlsConfig := &mint.Config{
+		Certificates:          []*mint.Certificate{cert},
+		InsecureSkipVerify:    true,
+		RequireClientAuth:     true,
+		AllowEarlyData:        true,
+		VerifyPeerCertificate: peertls.VerifyPeerFunc(peertls.VerifyPeerCertChains),
+	}
+	if err := tlsConfig.Init(true); err != nil {
+		return nil, err
+	}
+
+	return grpc.WithTransportCredentials(tls13.NewCredentials(tlsConfig)), nil
 }
 
 type nodeID string
