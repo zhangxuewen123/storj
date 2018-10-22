@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/peer"
 
 	"storj.io/storj/pkg/peertls"
+	"storj.io/storj/pkg/transport/noise"
 	"storj.io/storj/pkg/transport/tls13"
 	"storj.io/storj/pkg/utils"
 )
@@ -143,9 +144,9 @@ func PeerIdentityFromCerts(leaf, ca *x509.Certificate) (*PeerIdentity, error) {
 // PeerIdentityFromPeer loads a PeerIdentity from a peer connection
 func PeerIdentityFromPeer(peer *peer.Peer) (*PeerIdentity, error) {
 	{
-		tlsInfo, ok := peer.AuthInfo.(credentials.TLSInfo)
+		info, ok := peer.AuthInfo.(credentials.TLSInfo)
 		if ok {
-			c := tlsInfo.State.PeerCertificates
+			c := info.State.PeerCertificates
 			if len(c) < 2 {
 				return nil, Error.New("invalid certificate chain")
 			}
@@ -159,9 +160,25 @@ func PeerIdentityFromPeer(peer *peer.Peer) (*PeerIdentity, error) {
 	}
 
 	{
-		tlsInfo, ok := peer.AuthInfo.(tls13.TLSInfo)
+		info, ok := peer.AuthInfo.(tls13.TLSInfo)
 		if ok {
-			c := tlsInfo.State.PeerCertificates
+			c := info.State.PeerCertificates
+			if len(c) < 2 {
+				return nil, Error.New("invalid certificate chain")
+			}
+			// TODO: ensure that the order and CA-s are actually ordered
+			pi, err := PeerIdentityFromCerts(c[0], c[1])
+			if err != nil {
+				return nil, err
+			}
+			return pi, nil
+		}
+	}
+
+	{
+		info, ok := peer.AuthInfo.(noise.Info)
+		if ok {
+			c := info.PeerCertificates
 			if len(c) < 2 {
 				return nil, Error.New("invalid certificate chain")
 			}
