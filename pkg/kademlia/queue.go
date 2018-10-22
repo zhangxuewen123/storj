@@ -11,58 +11,49 @@ import (
 	"storj.io/storj/pkg/pb"
 )
 
-//We've encapsulated our priorityQueue{} implementation (below) so that you don't
-//have to know how the Golang heap API works (nor our priority XOR logic)
-
 //XorQueue is a priority queue where the priority is key XOR distance
 type XorQueue struct {
-	pq *priorityQueue
+	maxLen int
+	items  items
 }
 
-//NewXorQueue returns a priorityQueue with priority based on XOR from targetBytes
-func NewXorQueue(nodes []*pb.Node, target dht.NodeID) XorQueue {
-	targetBytes := new(big.Int).SetBytes(target.Bytes())
-	pq := make(priorityQueue, len(nodes))
-	for i, node := range nodes {
-		pq[i] = &item{value: node, index: i}
-		pq[i].priority = new(big.Int).Xor(targetBytes, new(big.Int).SetBytes([]byte(node.GetId())))
-	}
-	heap.Init(&pq)
-	return XorQueue{pq: &pq} 
+//NewXorQueue returns a items with priority based on XOR from targetBytes
+func NewXorQueue(size int) *XorQueue {
+	return &XorQueue{items: make(items, 0, size), maxLen: size}
 }
 
 //Insert adds Node onto the queue
-func (x XorQueue) Insert(node *pb.Node, target dht.NodeID) {
+func (x *XorQueue) Insert(target dht.NodeID, nodes []*pb.Node) {
 	targetBytes := new(big.Int).SetBytes(target.Bytes())
-	heap.Push(x.pq, &item{
-		value:    node,
-		priority: new(big.Int).Xor(targetBytes, new(big.Int).SetBytes([]byte(node.GetId()))),
-	})
+	//insert new nodes
+	for _, node := range nodes {
+		heap.Push(&x.items, &item{
+			value:    node,
+			priority: new(big.Int).Xor(targetBytes, new(big.Int).SetBytes([]byte(node.GetId()))),
+		})
+	}
+	//resize down if we grew too big
+	if x.items.Len() > x.maxLen {
+		olditems := x.items
+		x.items = items{}
+		for i := 0; i < x.maxLen && len(olditems) > 0; i++ {
+			item := heap.Pop(&olditems)
+			heap.Push(&x.items, item)
+		}
+		heap.Init(&x.items)
+	}
 }
 
-//PopClosest removed the closest priority node from the queue
-func (x XorQueue) PopClosest() (*pb.Node, dht.NodeID) {
-	item := *(heap.Pop(x.pq).(*item))
+//Closest removed the closest priority node from the queue
+func (x *XorQueue) Closest() (*pb.Node, dht.NodeID) {
+	item := *(heap.Pop(&x.items).(*item))
 	return item.value, item.priority
 }
 
-//Len returns the length of the queue
-func (x XorQueue) Len() int {
-	return x.pq.Len()
+//Len returns the number of items in the queue
+func (x *XorQueue) Len() int {
+	return x.items.Len()
 }
-
-// Resize resizes the queue, keeping the closest k items
-func (x *XorQueue) Resize(k int) {
-	oldPq := x.pq
-	x.pq = &priorityQueue{}
-	for i := 0; i < k && len(*oldPq) > 0; i++ {
-		item := heap.Pop(oldPq)
-		heap.Push(x.pq, item)
-	}
-	heap.Init(x.pq)
-}
-
-
 
 // An item is something we manage in a priority queue.
 type item struct {
@@ -72,40 +63,40 @@ type item struct {
 	index int // The index of the item in the heap.
 }
 
-// A priorityQueue implements heap.Interface and holds items.
-type priorityQueue []*item
+// A items implements heap.Interface and holds items.
+type items []*item
 
 // Len returns the length of the priority queue
-func (pq priorityQueue) Len() int { return len(pq) }
+func (items items) Len() int { return len(items) }
 
 // Less does what you would think
-func (pq priorityQueue) Less(i, j int) bool {
+func (items items) Less(i, j int) bool {
 	// this sorts the nodes where the node popped has the closest location
-	return pq[i].priority.Cmp(pq[j].priority) < 0
+	return items[i].priority.Cmp(items[j].priority) < 0
 }
 
 // Swap swaps two ints
-func (pq priorityQueue) Swap(i, j int) {
-	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index = i
-	pq[j].index = j
+func (items items) Swap(i, j int) {
+	items[i], items[j] = items[j], items[i]
+	items[i].index = i
+	items[j].index = j
 }
 
 // Push adds an item to the top of the queue
 // must call heap.fix to resort
-func (pq *priorityQueue) Push(x interface{}) {
-	n := len(*pq)
+func (items *items) Push(x interface{}) {
+	n := len(*items)
 	item := x.(*item)
 	item.index = n
-	*pq = append(*pq, item)
+	*items = append(*items, item)
 }
 
 // Pop returns the item with the lowest priority
-func (pq *priorityQueue) Pop() interface{} {
-	old := *pq
+func (items *items) Pop() interface{} {
+	old := *items
 	n := len(old)
 	item := old[n-1]
 	item.index = -1 // for safety
-	*pq = old[0 : n-1]
+	*items = old[0 : n-1]
 	return item
 }

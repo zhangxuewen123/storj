@@ -13,7 +13,7 @@ import (
 
 type sequentialLookup struct {
 	contacted       map[string]bool
-	queue           XorQueue
+	queue           *XorQueue
 	slowestResponse time.Duration
 	client          node.Client
 	target          dht.NodeID
@@ -22,7 +22,8 @@ type sequentialLookup struct {
 }
 
 func newSequentialLookup(rt *RoutingTable, nodes []*pb.Node, client node.Client, target dht.NodeID, limit int, bootstrap bool) *sequentialLookup {
-	queue := NewXorQueue(nodes, target)
+	queue := NewXorQueue(limit)
+	queue.Insert(target, nodes)
 
 	return &sequentialLookup{
 		contacted:       map[string]bool{},
@@ -43,21 +44,22 @@ func (lookup *sequentialLookup) Run(ctx context.Context) error {
 		default:
 		}
 
-		next, priority := lookup.queue.PopClosest()
+		next, priority := lookup.queue.Closest()
 		if !lookup.bootstrap && bytes.Equal(priority.Bytes(), make([]byte, len(priority.Bytes()))) {
 			return nil // found the result
 		}
 
+		uncontactedNeighbors := []*pb.Node{}
 		neighbors := lookup.FetchNeighbors(ctx, next)
 		for _, neighbor := range neighbors {
-			if lookup.contacted[neighbor.GetId()] {
-				continue
+			if !lookup.contacted[neighbor.GetId()] {
+				uncontactedNeighbors = append(uncontactedNeighbors, neighbor)
 			}
-			lookup.queue.Insert(neighbor, lookup.target)
 		}
+		lookup.queue.Insert(lookup.target, uncontactedNeighbors)
 
 		for lookup.queue.Len() > lookup.limit {
-			lookup.queue.PopClosest()
+			lookup.queue.Closest()
 		}
 	}
 	return nil

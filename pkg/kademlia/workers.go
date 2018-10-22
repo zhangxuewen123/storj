@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/zeebo/errs"
-
 	"storj.io/storj/pkg/dht"
 	"storj.io/storj/pkg/node"
 	"storj.io/storj/pkg/pb"
@@ -28,7 +27,7 @@ var (
 // worker pops work off a priority queue and does lookups on the work received
 type worker struct {
 	contacted      map[string]bool
-	pq             XorQueue
+	pq             *XorQueue
 	mu             *sync.Mutex
 	maxResponse    time.Duration
 	cancel         context.CancelFunc
@@ -39,9 +38,11 @@ type worker struct {
 }
 
 func newWorker(ctx context.Context, rt *RoutingTable, nodes []*pb.Node, nc node.Client, target dht.NodeID, k int) *worker {
+	pq := NewXorQueue(k)
+	pq.Insert(target, nodes)
 	return &worker{
 		contacted:      map[string]bool{},
-		pq:             NewXorQueue(nodes, target),
+		pq:             pq,
 		mu:             &sync.Mutex{},
 		maxResponse:    0 * time.Millisecond,
 		nodeClient:     nc,
@@ -103,7 +104,7 @@ func (w *worker) getWork(ctx context.Context, ch chan *pb.Node) {
 		}
 
 		w.workInProgress++
-		node, _ := w.pq.PopClosest()
+		node, _ := w.pq.Closest()
 		ch <- node
 		w.mu.Unlock()
 	}
@@ -141,18 +142,14 @@ func (w *worker) update(nodes []*pb.Node) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
+	uncontactedNodes := []*pb.Node{}
 	for _, v := range nodes {
 		// if we have already done a lookup on this node we don't want to do it again for this lookup loop
-		if w.contacted[v.GetId()] {
-			continue
+		if !w.contacted[v.GetId()] {
+			uncontactedNodes = append(uncontactedNodes, v)
 		}
-		w.pq.Insert(v, w.find)
 	}
-
-	// resize if we got too big.  keep the k closest nodes
-	if w.pq.Len() > w.k {
-		w.pq.Resize(w.k)
-	}
+	w.pq.Insert(w.find, uncontactedNodes)
 	w.workInProgress--
 }
 

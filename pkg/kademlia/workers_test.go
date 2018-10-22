@@ -38,7 +38,7 @@ func TestGetWork(t *testing.T) {
 			worker: func() *worker {
 				w := newWorker(context.Background(), nil, []*pb.Node{&pb.Node{Id: "foo"}}, nil, node.IDFromString("foo"), 5)
 				w.maxResponse = 0
-				w.pq.PopClosest()
+				w.pq.Closest()
 				assert.Equal(t, w.pq.Len(), 0)
 				return w
 			}(),
@@ -174,7 +174,7 @@ func TestUpdate(t *testing.T) {
 		assert.Equal(t, v.expectedQueueLength, v.worker.pq.Len())
 		i := 0
 		for v.worker.pq.Len() > 0 {
-			node, _ := v.worker.pq.PopClosest()
+			node, _ := v.worker.pq.Closest()
 			assert.Equal(t, v.expected[i], node)
 			i++
 		}
