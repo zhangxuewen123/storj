@@ -145,6 +145,8 @@ github.com/mattn/go-sqlite3 v1.9.0 h1:pDRiWfl+++eC2FEFRy6jXmQlvp4Yh3z1MJKg4UeYM/
 github.com/mattn/go-sqlite3 v1.9.0/go.mod h1:FPy6KqzDD04eiIsT53CuJW3U88zkxoIYsOqkbpncsNc=
 github.com/matttproud/golang_protobuf_extensions v1.0.1 h1:4hp9jkHxhMHkqkrB3Ix0jegS5sx/RkqARlsWZ6pIwiU=
 github.com/matttproud/golang_protobuf_extensions v1.0.1/go.mod h1:D8He9yQNgCq6Z5Ld7szi9bcBfOoFv/3dc6xSMkL2PC0=
+github.com/mimoo/NoiseGo v0.0.0-20180204133831-2ec65f8239b0 h1:/oTZSa63F1KNAOHkyirwGMLxHiemXESafHlW43VbHow=
+github.com/mimoo/NoiseGo v0.0.0-20180204133831-2ec65f8239b0/go.mod h1:+LvBq9uTdzWTE0XhCuwU0Ws9zDmWIarnfjAEjncdMo4=
 github.com/minio/cli v1.3.0 h1:vB0iUpmyaH54+1jJJj62Aa0qFF3xO3i0J3IcKiM6bHM=
 github.com/minio/cli v1.3.0/go.mod h1:hLsWNQy2wIf3FKFnMlH69f4RdEyn8nbRA2shaulTjGY=
 github.com/minio/dsync v0.0.0-20180124070302-439a0961af70 h1:pRHQdPOlUhelWqNUF3icFrBSC6VYH1hvF6HigVfgMoI=

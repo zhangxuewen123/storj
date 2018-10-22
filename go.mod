@@ -119,6 +119,7 @@ require (
 	github.com/go-ole/go-ole v1.2.1 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/mattn/go-colorable v0.0.9 // indirect
+	github.com/mimoo/NoiseGo v0.0.0-20180204133831-2ec65f8239b0 // indirect
 
 	github.com/minio/minio v0.0.0-20180508161510-54cd29b51c38
 	github.com/mitchellh/mapstructure v1.1.1 // indirect
