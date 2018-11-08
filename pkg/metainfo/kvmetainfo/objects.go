@@ -140,11 +140,8 @@ func (db *Objects) ListObjects(ctx context.Context, bucket string, options storj
 }
 
 type object struct {
-	fullpath        string
-	encryptedPath   string
-	lastSegmentMeta segments.Meta
-	streamInfo      pb.StreamInfo
-	streamMeta      pb.StreamMeta
+	fullpath      string
+	encryptedPath string
 }
 
 func (db *Objects) getInfo(ctx context.Context, prefix string, bucket string, path storj.Path) (object, storj.Object, error) {
@@ -156,6 +153,69 @@ func (db *Objects) getInfo(ctx context.Context, prefix string, bucket string, pa
 	}
 
 	pointer, _, err := db.pointers.Get(ctx, prefix+encryptedPath)
+	if err != nil {
+		return object{}, storj.Object{}, err
+	}
+
+	var redundancyScheme *pb.RedundancyScheme
+	if pointer.GetType() == pb.Pointer_REMOTE {
+		redundancyScheme = pointer.GetRemote().GetRedundancy()
+	} else {
+		// TODO: handle better
+		redundancyScheme = &pb.RedundancyScheme{
+			Type:             pb.RedundancyScheme_RS,
+			MinReq:           -1,
+			Total:            -1,
+			RepairThreshold:  -1,
+			SuccessThreshold: -1,
+			ErasureShareSize: -1,
+		}
+	}
+
+	lastSegmentMeta := segments.Meta{
+		Modified:   convertTime(pointer.GetCreationDate()),
+		Expiration: convertTime(pointer.GetExpirationDate()),
+		Size:       pointer.GetSize(),
+		Data:       pointer.GetMetadata(),
+	}
+
+	streamInfoData, err := streams.DecryptStreamInfo(ctx, lastSegmentMeta, fullpath, db.rootKey)
+	if err != nil {
+		return object{}, storj.Object{}, err
+	}
+
+	streamInfo := pb.StreamInfo{}
+	err = proto.Unmarshal(streamInfoData, &streamInfo)
+	if err != nil {
+		return object{}, storj.Object{}, err
+	}
+
+	streamMeta := pb.StreamMeta{}
+	err = proto.Unmarshal(lastSegmentMeta.Data, &streamMeta)
+	if err != nil {
+		return object{}, storj.Object{}, err
+	}
+
+	info := objectStreamFromMeta(bucket, path, lastSegmentMeta, streamInfo, streamMeta, redundancyScheme)
+
+	return object{
+		fullpath:        fullpath,
+		encryptedPath:   encryptedPath,
+		lastSegmentMeta: lastSegmentMeta,
+		streamInfo:      streamInfo,
+		streamMeta:      streamMeta,
+	}, info, nil
+}
+
+func (db *Objects) setInfo(ctx context.Context, prefix string, bucket string, object storj.Object) error {
+	fullpath := bucket + "/" + path
+
+	encryptedPath, err := streams.EncryptAfterBucket(fullpath, db.rootKey)
+	if err != nil {
+		return object{}, storj.Object{}, err
+	}
+
+	pointer, _, err := db.pointers.Set(ctx, prefix+encryptedPath)
 	if err != nil {
 		return object{}, storj.Object{}, err
 	}
