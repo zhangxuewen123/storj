@@ -7,39 +7,26 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
-	"fmt"
+	"flag"
 	"log"
 	"net"
+	"os"
 	"testing"
 
+	"github.com/gtank/cryptopasta"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
 	"github.com/stretchr/testify/assert"
 
-	dbx "storj.io/storj/pkg/bwagreement/dbx"
 	"storj.io/storj/pkg/pb"
+	"storj.io/storj/pkg/peertls"
 	"storj.io/storj/pkg/provider"
 )
 
 var (
 	ctx = context.Background()
 )
-
-const (
-	host     = "localhost"
-	port     = 5432
-	user     = "postgres"
-	password = "your-password"
-	dbname   = "pointerdb"
-)
-
-func getPSQLInfo() string {
-	psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
-		"password=%s dbname=%s sslmode=disable",
-		host, port, user, password, dbname)
-	return psqlInfo
-}
 
 func TestBandwidthAgreements(t *testing.T) {
 	TS := NewTestServer(t)
@@ -53,6 +40,10 @@ func TestBandwidthAgreements(t *testing.T) {
 		Data:      data,
 	}
 
+	s, err := cryptopasta.Sign(msg.Data, TS.k.(*ecdsa.PrivateKey))
+	assert.NoError(t, err)
+	msg.Signature = s
+
 	/* emulate sending the bwagreement stream from piecestore node */
 	stream, err := TS.c.BandwidthAgreements(ctx)
 	assert.NoError(t, err)
@@ -60,16 +51,6 @@ func TestBandwidthAgreements(t *testing.T) {
 	assert.NoError(t, err)
 
 	_, _ = stream.CloseAndRecv()
-
-	/* read back from the postgres db in bwagreement table */
-	retData, err := TS.s.DB.Get_Bwagreement_By_Signature(ctx, dbx.Bwagreement_Signature(signature))
-	assert.EqualValues(t, retData.Data, data)
-	assert.NoError(t, err)
-
-	/* delete the entry what you just wrote */
-	delBool, err := TS.s.DB.Delete_Bwagreement_By_Signature(ctx, dbx.Bwagreement_Signature(signature))
-	assert.True(t, delBool)
-	assert.NoError(t, err)
 }
 
 type TestServer struct {
@@ -98,7 +79,7 @@ func NewTestServer(t *testing.T) *TestServer {
 	check(err)
 	fiC, err := caC.NewIdentity()
 	check(err)
-	co, err := fiC.DialOption()
+	co, err := fiC.DialOption("")
 	check(err)
 
 	s := newTestServerStruct(t)
@@ -113,11 +94,30 @@ func NewTestServer(t *testing.T) *TestServer {
 	return ts
 }
 
+const (
+	// this connstring is expected to work under the storj-test docker-compose instance
+	defaultPostgresConn = "postgres://pointerdb:pg-secret-pass@test-postgres-pointerdb/pointerdb?sslmode=disable"
+)
+
+var (
+	// for travis build support
+	testPostgres = flag.String("postgres-test-db", os.Getenv("STORJ_POSTGRESKV_TEST"), "PostgreSQL test database connection string")
+)
+
 func newTestServerStruct(t *testing.T) *Server {
-	psqlInfo := getPSQLInfo()
-	s, err := NewServer("postgres", psqlInfo, zap.NewNop())
+	if *testPostgres == "" {
+		t.Skipf("postgres flag missing, example:\n-postgres-test-db=%s", defaultPostgresConn)
+	}
+
+	k, err := peertls.NewKey()
 	assert.NoError(t, err)
-	return s
+
+	p, _ := k.(*ecdsa.PrivateKey)
+	server, err := NewServer("postgres", *testPostgres, zap.NewNop(), &p.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return server
 }
 
 func (TS *TestServer) start() (addr string) {
