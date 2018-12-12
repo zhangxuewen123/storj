@@ -28,7 +28,6 @@ import (
 // RSConfig is a configuration struct that keeps details about default
 // redundancy strategy information
 type RSConfig struct {
-	MaxBufferMem     int `help:"maximum buffer memory (in bytes) to be allocated for read buffers" default:"0x400000"`
 	ErasureShareSize int `help:"the size of each new erasure sure in bytes" default:"1024"`
 	MinThreshold     int `help:"the minimum pieces required to recover a segment. k." default:"29"`
 	RepairThreshold  int `help:"the minimum safe pieces before a repair is triggered. m." default:"35"`
@@ -72,6 +71,7 @@ type ClientConfig struct {
 	APIKey        string `help:"API Key (TODO: this needs to change to macaroons somehow)"`
 	MaxInlineSize int    `help:"max inline segment size in bytes" default:"4096"`
 	SegmentSize   int64  `help:"the size of a segment in bytes" default:"64000000"`
+	MaxBufferMem  int    `help:"maximum buffer memory (in bytes) to be allocated for read buffers" default:"0x400000"`
 }
 
 // Config is a general miniogw configuration struct. This should be everything
@@ -147,7 +147,7 @@ func (c Config) GetMetainfo(ctx context.Context, identity *provider.FullIdentity
 		return nil, nil, err
 	}
 
-	ec := ecclient.NewClient(identity, c.RS.MaxBufferMem)
+	ec := ecclient.NewClient(identity, c.Client.MaxBufferMem)
 	fc, err := infectious.NewFEC(c.RS.MinThreshold, c.RS.MaxThreshold)
 	if err != nil {
 		return nil, nil, err
