@@ -6,12 +6,13 @@ package miniogw
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"io"
+	"net/http"
 	"strings"
 
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/pkg/auth"
-	"github.com/minio/minio/pkg/hash"
 	"github.com/zeebo/errs"
 	monkit "gopkg.in/spacemonkeygo/monkit.v2"
 
@@ -39,6 +40,8 @@ func NewStorjGateway(metainfo storj.Metainfo, streams streams.Store, pathCipher 
 		multipart:  NewMultipartUploads(),
 	}
 }
+
+var _ minio.ObjectLayer = (*gatewayLayer)(nil)
 
 // Gateway is the implementation of a minio cmd.Gateway
 type Gateway struct {
@@ -107,7 +110,7 @@ func (layer *gatewayLayer) GetBucketInfo(ctx context.Context, bucket string) (bu
 	return minio.BucketInfo{Name: info.Name, Created: info.Created}, nil
 }
 
-func (layer *gatewayLayer) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string) (err error) {
+func (layer *gatewayLayer) GetObject(ctx context.Context, bucket, object string, startOffset int64, length int64, writer io.Writer, etag string, opts minio.ObjectOptions) (err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	readOnlyStream, err := layer.gateway.metainfo.GetObjectStream(ctx, bucket, object)
@@ -140,7 +143,7 @@ func (layer *gatewayLayer) GetObject(ctx context.Context, bucket, object string,
 	return err
 }
 
-func (layer *gatewayLayer) GetObjectInfo(ctx context.Context, bucket, object string) (objInfo minio.ObjectInfo, err error) {
+func (layer *gatewayLayer) GetObjectInfo(ctx context.Context, bucket, object string, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	obj, err := layer.gateway.metainfo.GetObject(ctx, bucket, object)
@@ -157,6 +160,10 @@ func (layer *gatewayLayer) GetObjectInfo(ctx context.Context, bucket, object str
 		ContentType: obj.ContentType,
 		UserDefined: obj.Metadata,
 	}, err
+}
+
+func (layer *gatewayLayer) GetObjectNInfo(ctx context.Context, bucket, object string, rs *minio.HTTPRangeSpec, h http.Header, lockType minio.LockType, opts minio.ObjectOptions) (gr *minio.GetObjectReader, err error) {
+	return nil, errors.New("unimplemented")
 }
 
 func (layer *gatewayLayer) ListBuckets(ctx context.Context) (bucketItems []minio.BucketInfo, err error) {
@@ -338,7 +345,7 @@ func (layer *gatewayLayer) MakeBucketWithLocation(ctx context.Context, bucket st
 	return err
 }
 
-func (layer *gatewayLayer) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo) (objInfo minio.ObjectInfo, err error) {
+func (layer *gatewayLayer) CopyObject(ctx context.Context, srcBucket, srcObject, destBucket, destObject string, srcInfo minio.ObjectInfo, srcOpts, dstOpts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	readOnlyStream, err := layer.gateway.metainfo.GetObjectStream(ctx, srcBucket, srcObject)
@@ -405,7 +412,7 @@ func upload(ctx context.Context, streams streams.Store, mutableObject storj.Muta
 	return utils.CombineErrors(err, upload.Close())
 }
 
-func (layer *gatewayLayer) PutObject(ctx context.Context, bucket, object string, data *hash.Reader, metadata map[string]string) (objInfo minio.ObjectInfo, err error) {
+func (layer *gatewayLayer) PutObject(ctx context.Context, bucket, object string, data *minio.PutReader, metadata map[string]string) (objInfo minio.ObjectInfo, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	contentType := metadata["content-type"]

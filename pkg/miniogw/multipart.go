@@ -18,7 +18,7 @@ import (
 	"storj.io/storj/pkg/storj"
 )
 
-func (layer *gatewayLayer) NewMultipartUpload(ctx context.Context, bucket, object string, metadata map[string]string) (uploadID string, err error) {
+func (layer *gatewayLayer) NewMultipartUpload(ctx context.Context, bucket, object string, metadata map[string]string, opts minio.ObjectOptions) (uploadID string, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	// Check that the bucket exists
@@ -109,7 +109,7 @@ func (layer *gatewayLayer) AbortMultipartUpload(ctx context.Context, bucket, obj
 	return nil
 }
 
-func (layer *gatewayLayer) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart) (objInfo minio.ObjectInfo, err error) {
+func (layer *gatewayLayer) CompleteMultipartUpload(ctx context.Context, bucket, object, uploadID string, uploadedParts []minio.CompletePart, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	uploads := layer.gateway.multipart
