@@ -3,7 +3,13 @@ set -ueo pipefail
 go install -v storj.io/storj/cmd/captplanet
 
 captplanet setup --overwrite
-sed -i~ 's/interval:.*/interval: 1s/g' $HOME/.local/share/storj/capt/config.yaml
+
+unamestr=`uname`
+if [[ "$unamestr" == 'Darwin' ]]; then
+  sed -i~ 's/interval:.*/interval: 1s/g' $HOME/Library/Application\ Support/Storj/Capt/config.yaml
+else
+  sed -i~ 's/interval:.*/interval: 1s/g' $HOME/.local/share/storj/capt/config.yaml
+fi
 
 # run captplanet for 5 seconds to reproduce kademlia problems. See V3-526
 captplanet run &
@@ -13,6 +19,9 @@ kill -9 $CAPT_PID
 
 captplanet run &
 CAPT_PID=$!
+
+# Wait 2 seconds for kademlia startup
+sleep 2
 
 #setup tmpdir for testfiles and cleanup
 TMP_DIR=$(mktemp -d -t tmp.XXXXXXXXXX)
@@ -76,9 +85,17 @@ fi
 kill -9 $CAPT_PID
 
 captplanet setup --listen-host ::1 --overwrite
-sed -i~ 's/interval:.*/interval: 1s/g' $HOME/.local/share/storj/capt/config.yaml
+if [[ "$unamestr" == 'Darwin' ]]; then
+  sed -i~ 's/interval:.*/interval: 1s/g' $HOME/Library/Application\ Support/Storj/Capt/config.yaml
+else
+  sed -i~ 's/interval:.*/interval: 1s/g' $HOME/.local/share/storj/capt/config.yaml
+fi
+
 captplanet run &
 CAPT_PID=$!
+
+# Wait 2 seconds for kademlia startup
+sleep 2
 
 aws s3 --endpoint=http://localhost:7777/ mb s3://bucket
 aws s3 --endpoint=http://localhost:7777/ cp $TMP_DIR/big-upload-testfile s3://bucket/big-testfile

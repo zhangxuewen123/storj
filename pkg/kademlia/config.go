@@ -23,13 +23,9 @@ var (
 	mon   = monkit.Package()
 )
 
-const (
-	defaultAlpha = 5
-)
-
 var (
-	flagBucketSize           = flag.Int("kademlia-bucket-size", 20, "Size of each Kademlia bucket")
-	flagReplacementCacheSize = flag.Int("kademlia-replacement-cache-size", 5, "Size of Kademlia replacement cache")
+	flagBucketSize           = flag.Int("kademlia.bucket-size", 20, "Size of each Kademlia bucket")
+	flagReplacementCacheSize = flag.Int("kademlia.replacement-cache-size", 5, "Size of Kademlia replacement cache")
 )
 
 //CtxKey Used as kademlia key
@@ -85,7 +81,7 @@ func (c Config) Run(ctx context.Context, server *provider.Provider) (
 	}
 	defer func() { err = utils.CombineErrors(err, kad.Disconnect()) }()
 
-	pb.RegisterNodesServer(server.GRPC(), node.NewServer(kad))
+	pb.RegisterNodesServer(server.GRPC(), node.NewServer(zap.L(), kad))
 
 	go func() {
 		if err = kad.Bootstrap(ctx); err != nil {
