@@ -41,8 +41,6 @@ func NewStorjGateway(metainfo storj.Metainfo, streams streams.Store, pathCipher 
 	}
 }
 
-var _ minio.ObjectLayer = (*gatewayLayer)(nil)
-
 // Gateway is the implementation of a minio cmd.Gateway
 type Gateway struct {
 	metainfo   storj.Metainfo
@@ -412,7 +410,7 @@ func upload(ctx context.Context, streams streams.Store, mutableObject storj.Muta
 	return utils.CombineErrors(err, upload.Close())
 }
 
-func (layer *gatewayLayer) PutObject(ctx context.Context, bucket, object string, data *minio.PutReader, metadata map[string]string) (objInfo minio.ObjectInfo, err error) {
+func (layer *gatewayLayer) PutObject(ctx context.Context, bucket, object string, data *minio.PutObjReader, metadata map[string]string, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	contentType := metadata["content-type"]

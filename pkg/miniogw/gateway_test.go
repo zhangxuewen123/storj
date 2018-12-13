@@ -3,6 +3,7 @@
 
 package miniogw
 
+/*
 import (
 	"bytes"
 	"context"
@@ -737,3 +738,4 @@ func createFile(ctx context.Context, metainfo storj.Metainfo, streams streams.St
 
 	return mutableObject.Info(), nil
 }
+*/

@@ -13,7 +13,6 @@ import (
 	"time"
 
 	minio "github.com/minio/minio/cmd"
-	"github.com/minio/minio/pkg/hash"
 
 	"storj.io/storj/pkg/storj"
 )
@@ -58,7 +57,7 @@ func (layer *gatewayLayer) NewMultipartUpload(ctx context.Context, bucket, objec
 	return upload.ID, nil
 }
 
-func (layer *gatewayLayer) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *hash.Reader) (info minio.PartInfo, err error) {
+func (layer *gatewayLayer) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (info minio.PartInfo, err error) {
 	defer mon.Task()(&ctx)(&err)
 
 	uploads := layer.gateway.multipart
@@ -324,7 +323,7 @@ type StreamPart struct {
 	Number int
 	ID     int
 	Size   int64
-	Reader *hash.Reader
+	Reader *minio.PutObjReader
 	Done   chan error
 }
 
@@ -419,7 +418,7 @@ func (stream *MultipartStream) Read(data []byte) (n int, err error) {
 }
 
 // AddPart adds a new part to the stream to wait
-func (stream *MultipartStream) AddPart(partID int, data *hash.Reader) (*StreamPart, error) {
+func (stream *MultipartStream) AddPart(partID int, data *minio.PutObjReader) (*StreamPart, error) {
 	stream.mu.Lock()
 	defer stream.mu.Unlock()
 

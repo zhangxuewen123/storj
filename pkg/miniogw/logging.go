@@ -11,7 +11,6 @@ import (
 
 	minio "github.com/minio/minio/cmd"
 	"github.com/minio/minio/pkg/auth"
-	"github.com/minio/minio/pkg/hash"
 	"github.com/minio/minio/pkg/madmin"
 	"github.com/minio/minio/pkg/policy"
 	"go.uber.org/zap"
@@ -104,8 +103,8 @@ func (log *layerLogging) GetObjectNInfo(ctx context.Context, bucket, object stri
 	return gr, log.log(err)
 }
 
-func (log *layerLogging) PutObject(ctx context.Context, bucket, object string, data *minio.PutReader, metadata map[string]string) (objInfo minio.ObjectInfo, err error) {
-	objInfo, err = log.layer.PutObject(ctx, bucket, object, data, metadata)
+func (log *layerLogging) PutObject(ctx context.Context, bucket, object string, data *minio.PutObjReader, metadata map[string]string, opts minio.ObjectOptions) (objInfo minio.ObjectInfo, err error) {
+	objInfo, err = log.layer.PutObject(ctx, bucket, object, data, metadata, opts)
 	return objInfo, log.log(err)
 }
 
@@ -123,8 +122,8 @@ func (log *layerLogging) ListMultipartUploads(ctx context.Context, bucket, prefi
 	return result, log.log(err)
 }
 
-func (log *layerLogging) NewMultipartUpload(ctx context.Context, bucket, object string, metadata map[string]string) (uploadID string, err error) {
-	uploadID, err = log.layer.NewMultipartUpload(ctx, bucket, object, metadata)
+func (log *layerLogging) NewMultipartUpload(ctx context.Context, bucket, object string, metadata map[string]string, opts minio.ObjectOptions) (uploadID string, err error) {
+	uploadID, err = log.layer.NewMultipartUpload(ctx, bucket, object, metadata, opts)
 	return uploadID, log.log(err)
 }
 
@@ -133,8 +132,8 @@ func (log *layerLogging) CopyObjectPart(ctx context.Context, srcBucket, srcObjec
 	return info, log.log(err)
 }
 
-func (log *layerLogging) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *hash.Reader) (info minio.PartInfo, err error) {
-	info, err = log.layer.PutObjectPart(ctx, bucket, object, uploadID, partID, data)
+func (log *layerLogging) PutObjectPart(ctx context.Context, bucket, object, uploadID string, partID int, data *minio.PutObjReader, opts minio.ObjectOptions) (info minio.PartInfo, err error) {
+	info, err = log.layer.PutObjectPart(ctx, bucket, object, uploadID, partID, data, opts)
 	return info, log.log(err)
 }
 
@@ -205,4 +204,8 @@ func (log *layerLogging) IsEncryptionSupported() bool {
 
 func (log *layerLogging) IsCompressionSupported() bool {
 	return log.layer.IsCompressionSupported()
+}
+
+func (log *layerLogging) IsListenBucketSupported() bool {
+	return log.layer.IsListenBucketSupported()
 }
