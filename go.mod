@@ -83,16 +83,15 @@ require (
 	github.com/marstr/guid v1.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.4 // indirect
 	github.com/mattn/go-runewidth v0.0.3 // indirect
-	github.com/mattn/go-sqlite3 v1.9.0
+	github.com/mattn/go-sqlite3 v1.10.0
 	github.com/miekg/dns v1.1.1 // indirect
 	github.com/minio/blazer v0.2.0 // indirect
-	github.com/mattn/go-sqlite3 v1.10.0
 	github.com/minio/cli v1.3.0
 	github.com/minio/dsync v0.0.0-20180124070302-439a0961af70 // indirect
 	github.com/minio/highwayhash v0.0.0-20180501080913-85fc8a2dacad // indirect
 	github.com/minio/lsync v0.0.0-20180328070428-f332c3883f63 // indirect
 	github.com/minio/mc v0.0.0-20180926130011-a215fbb71884 // indirect
-	github.com/minio/minio-go v6.0.3+incompatible
+	github.com/minio/minio-go v6.0.11+incompatible
 	github.com/minio/sha256-simd v0.0.0-20171213220625-ad98a36ba0da // indirect
 	github.com/minio/sio v0.0.0-20180327104954-6a41828a60f0 // indirect
 	github.com/mitchellh/go-homedir v0.0.0-20180801233206-58046073cbff // indirect
