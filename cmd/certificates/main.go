@@ -77,8 +77,9 @@ var (
 		// NB: cert and key paths overridden in setup
 		CA identity.CASetupConfig
 		// NB: cert and key paths overridden in setup
-		Identity identity.SetupConfig
-		certificates.CertSignerConfig
+		Identity  identity.SetupConfig
+		Signer    certificates.CertSignerConfig
+		Overwrite bool `default:"false" help:"if true ca, identity, and authorization db will be overwritten/truncated"`
 	}
 
 	runCfg struct {
@@ -110,6 +111,8 @@ var (
 func init() {
 	rootCmd.AddCommand(setupCmd)
 	cfgstruct.Bind(setupCmd.Flags(), &setupCfg, cfgstruct.ConfDir(defaultConfDir))
+	rootCmd.AddCommand(runCmd)
+	cfgstruct.Bind(runCmd.Flags(), &runCfg, cfgstruct.ConfDir(defaultConfDir))
 	rootCmd.AddCommand(authCmd)
 	authCmd.AddCommand(authCreateCmd)
 	cfgstruct.Bind(authCreateCmd.Flags(), &authCreateCfg, cfgstruct.ConfDir(defaultConfDir))
@@ -125,6 +128,11 @@ func cmdSetup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	err = os.MkdirAll(setupDir, 0700)
+	if err != nil {
+		return err
+	}
+
 	valid, err := fpath.IsValidSetupDir(setupDir)
 	if err != nil {
 		return err
@@ -134,21 +142,21 @@ func cmdSetup(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if _, err := setupCfg.NewAuthDB(); err != nil {
-		return err
+	if setupCfg.Overwrite {
+		setupCfg.CA.Overwrite = true
+		setupCfg.Identity.Overwrite = true
+		setupCfg.Signer.Overwrite = true
 	}
 
-	err = os.MkdirAll(setupDir, 0700)
-	if err != nil {
+	if _, err := setupCfg.Signer.NewAuthDB(); err != nil {
 		return err
 	}
-
 	setupCfg.CA.CertPath = filepath.Join(setupDir, "ca.cert")
 	setupCfg.CA.KeyPath = filepath.Join(setupDir, "ca.key")
 	setupCfg.Identity.CertPath = filepath.Join(setupDir, "identity.cert")
 	setupCfg.Identity.KeyPath = filepath.Join(setupDir, "identity.key")
 
-	err = identity.SetupCA(process.Ctx(cmd), setupCfg.CA)
+	err = identity.SetupIdentity(process.Ctx(cmd), setupCfg.CA, setupCfg.Identity)
 	if err != nil {
 		return err
 	}
