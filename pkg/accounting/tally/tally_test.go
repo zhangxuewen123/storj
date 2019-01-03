@@ -4,6 +4,7 @@
 package tally
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"testing"
 	"time"
@@ -62,18 +63,24 @@ func TestQueryWithBw(t *testing.T) {
 	k, ok := fiC.Key.(*ecdsa.PrivateKey)
 	assert.True(t, ok)
 
-	//generate an agreement with the key
-	pba, err := test.GeneratePayerBandwidthAllocation(pb.PayerBandwidthAllocation_GET, k, k)
-	assert.NoError(t, err)
-
-	rba, err := test.GenerateRenterBandwidthAllocation(pba, k)
-	assert.NoError(t, err)
-	//save to db
-
-	err = bwDb.CreateAgreement(ctx, bwagreement.Agreement{Signature: rba.GetSignature(), Agreement: rba.GetData()})
-	assert.NoError(t, err)
+	makeBWA(ctx, t, bwDb, k, pb.PayerBandwidthAllocation_PUT)
+	makeBWA(ctx, t, bwDb, k, pb.PayerBandwidthAllocation_GET)
+	makeBWA(ctx, t, bwDb, k, pb.PayerBandwidthAllocation_GET_AUDIT)
+	makeBWA(ctx, t, bwDb, k, pb.PayerBandwidthAllocation_GET_REPAIR)
+	makeBWA(ctx, t, bwDb, k, pb.PayerBandwidthAllocation_PUT_REPAIR)
 
 	//check the db
 	err = tally.queryBW(ctx)
+	assert.NoError(t, err)
+}
+
+func makeBWA(ctx context.Context, t *testing.T, bwDb bwagreement.DB, k *ecdsa.PrivateKey, action pb.PayerBandwidthAllocation_Action) {
+	//generate an agreement with the key
+	pba, err := test.GeneratePayerBandwidthAllocation(action, k, k)
+	assert.NoError(t, err)
+	rba, err := test.GenerateRenterBandwidthAllocation(pba, k)
+	assert.NoError(t, err)
+	//save to db
+	err = bwDb.CreateAgreement(ctx, bwagreement.Agreement{Signature: rba.GetSignature(), Agreement: rba.GetData()})
 	assert.NoError(t, err)
 }

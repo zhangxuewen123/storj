@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"time"
 
 	"github.com/vivint/infectious"
 	monkit "gopkg.in/spacemonkeygo/monkit.v2"
@@ -69,6 +70,20 @@ func (d *defaultDownloader) getShare(ctx context.Context, stripeIndex, shareSize
 	derivedPieceID, err := id.Derive(fromNode.Id.Bytes())
 	if err != nil {
 		return s, err
+	}
+
+	allocationData := &pb.PayerBandwidthAllocation_Data{
+		Action:         pb.PayerBandwidthAllocation_GET_AUDIT,
+		CreatedUnixSec: time.Now().Unix(),
+	}
+
+	serializedAllocation, err := proto.Marshal(allocationData)
+	if err != nil {
+		return s, err
+	}
+
+	pba := &pb.PayerBandwidthAllocation{
+		Data: serializedAllocation,
 	}
 
 	rr, err := ps.Get(ctx, derivedPieceID, pieceSize, pba, authorization)
