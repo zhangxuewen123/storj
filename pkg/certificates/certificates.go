@@ -20,7 +20,7 @@ import (
 	"github.com/zeebo/errs"
 	"go.uber.org/zap"
 	"google.golang.org/grpc/peer"
-	monkit "gopkg.in/spacemonkeygo/monkit.v2"
+	"gopkg.in/spacemonkeygo/monkit.v2"
 
 	"storj.io/storj/pkg/identity"
 	"storj.io/storj/pkg/pb"
@@ -72,7 +72,7 @@ type CertSignerConfig struct {
 
 // CertificateSigner implements pb.CertificatesServer
 type CertificateSigner struct {
-	Logger        *zap.Logger
+	Log           *zap.Logger
 	Signer        *identity.FullCertificateAuthority
 	AuthDB        *AuthorizationDB
 	MinDifficulty uint16
@@ -242,7 +242,7 @@ func (c CertSigningConfig) SetupIdentity(
 
 	signedChainBytes, err := c.Sign(ctx, ident)
 	if err != nil {
-		return fmt.Errorf("error occured while signing certificate: %s\n(identity files were still generated and saved, if you try again existnig files will be loaded)", err)
+		return errs.New("error occured while signing certificate: %s\n(identity files were still generated and saved, if you try again existnig files will be loaded)", err)
 	}
 
 	signedChain, err := identity.ParseCertChain(signedChainBytes)
@@ -252,13 +252,17 @@ func (c CertSigningConfig) SetupIdentity(
 
 	ca.Cert = signedChain[0]
 	ca.RestChain = signedChain[1:]
-	err = caConfig.FullConfig().Save(ca)
+	err = identity.FullCAConfig{
+		CertPath: caConfig.FullConfig().CertPath,
+	}.Save(ca)
 	if err != nil {
 		return err
 	}
 
 	ident.RestChain = signedChain[1:]
-	err = identConfig.FullConfig().Save(ident)
+	err = identity.Config{
+		CertPath: identConfig.FullConfig().CertPath,
+	}.Save(ident)
 	if err != nil {
 		return err
 	}
@@ -300,7 +304,8 @@ func (c CertSignerConfig) NewAuthDB() (*AuthorizationDB, error) {
 	authDB := new(AuthorizationDB)
 	switch driver {
 	case "bolt":
-		if c.Overwrite {
+		_, err := os.Stat(source)
+		if c.Overwrite && err == nil {
 			if err := os.Remove(source); err != nil {
 				return nil, err
 			}
@@ -348,12 +353,25 @@ func (c CertSignerConfig) Run(ctx context.Context, server *provider.Provider) (e
 	}
 
 	srv := &CertificateSigner{
-		Logger:        zap.L(),
+		Log:           zap.L(),
 		Signer:        signer,
 		AuthDB:        authDB,
 		MinDifficulty: uint16(c.MinDifficulty),
 	}
 	pb.RegisterCertificatesServer(server.GRPC(), srv)
+
+	srv.Log.Info(
+		"Certificate signing server running",
+		zap.String("address", server.Addr().String()),
+	)
+
+	go func() {
+		done := ctx.Done()
+		<-done
+		if err := server.Close(); err != nil {
+			srv.Log.Error("closing server", zap.Error(err))
+		}
+	}()
 
 	return server.Run(ctx)
 }

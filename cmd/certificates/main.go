@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"storj.io/storj/pkg/cfgstruct"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -19,7 +20,6 @@ import (
 
 	"storj.io/storj/internal/fpath"
 	"storj.io/storj/pkg/certificates"
-	"storj.io/storj/pkg/cfgstruct"
 	"storj.io/storj/pkg/identity"
 	"storj.io/storj/pkg/process"
 	"storj.io/storj/pkg/server"
@@ -106,23 +106,32 @@ var (
 	}
 
 	defaultConfDir = fpath.ApplicationDir("storj", "cert-signing")
+	//confDir = rootCmd.PersistentFlags().String("config-dir", defaultConfDir, "main directory for captplanet configuration")
+	confDir *string
 )
 
 func init() {
+	fmt.Println("one")
+	defaultConfDir = fpath.ApplicationDir("storj", "cert-signing")
+	confDir = rootCmd.PersistentFlags().String("config-dir", defaultConfDir, "main directory for captplanet configuration")
+	fmt.Println("three")
 	rootCmd.AddCommand(setupCmd)
 	cfgstruct.Bind(setupCmd.Flags(), &setupCfg, cfgstruct.ConfDir(defaultConfDir))
-	rootCmd.AddCommand(runCmd)
-	cfgstruct.Bind(runCmd.Flags(), &runCfg, cfgstruct.ConfDir(defaultConfDir))
-	rootCmd.AddCommand(authCmd)
-	authCmd.AddCommand(authCreateCmd)
-	cfgstruct.Bind(authCreateCmd.Flags(), &authCreateCfg, cfgstruct.ConfDir(defaultConfDir))
-	authCmd.AddCommand(authInfoCmd)
-	cfgstruct.Bind(authInfoCmd.Flags(), &authInfoCfg, cfgstruct.ConfDir(defaultConfDir))
-	authCmd.AddCommand(authExportCmd)
-	cfgstruct.Bind(authExportCmd.Flags(), &authExportCfg, cfgstruct.ConfDir(defaultConfDir))
+	//rootCmd.AddCommand(runCmd)
+	//cfgstruct.Bind(runCmd.Flags(), &runCfg, cfgstruct.ConfDir(defaultConfDir))
+	//rootCmd.AddCommand(authCmd)
+	//authCmd.AddCommand(authCreateCmd)
+	//cfgstruct.Bind(authCreateCmd.Flags(), &authCreateCfg, cfgstruct.ConfDir(defaultConfDir))
+	//authCmd.AddCommand(authInfoCmd)
+	//cfgstruct.Bind(authInfoCmd.Flags(), &authInfoCfg, cfgstruct.ConfDir(defaultConfDir))
+	//authCmd.AddCommand(authExportCmd)
+	//cfgstruct.Bind(authExportCmd.Flags(), &authExportCfg, cfgstruct.ConfDir(defaultConfDir))
+	fmt.Println("four")
 }
 
 func cmdSetup(cmd *cobra.Command, args []string) error {
+	fmt.Println("two")
+	//setupDir, err := filepath.Abs(*confDir)
 	setupDir, err := filepath.Abs(defaultConfDir)
 	if err != nil {
 		return err
@@ -166,6 +175,7 @@ func cmdSetup(cmd *cobra.Command, args []string) error {
 		"ca.key-path":        setupCfg.CA.KeyPath,
 		"identity.cert-path": setupCfg.Identity.CertPath,
 		"identity.key-path":  setupCfg.Identity.KeyPath,
+		"log.level":          "info",
 	}
 	return process.SaveConfig(runCmd.Flags(),
 		filepath.Join(setupDir, "config.yaml"), o)
@@ -314,7 +324,7 @@ func cmdExportAuth(cmd *cobra.Command, args []string) error {
 			return errs.New("Either use `--emails-path` or positional args, not both.")
 		}
 		emails = args
-	} else if authExportCfg.All {
+	} else if len(args) == 0 || authExportCfg.All {
 		emails, err = authDB.UserIDs()
 		if err != nil {
 			return err
@@ -335,6 +345,9 @@ func cmdExportAuth(cmd *cobra.Command, args []string) error {
 	case "-":
 		output = os.Stdout
 	default:
+		if err := os.MkdirAll(filepath.Dir(authExportCfg.Out), 0600); err != nil {
+			return errs.Wrap(err)
+		}
 		output, err = os.OpenFile(authExportCfg.Out, os.O_CREATE, 0600)
 		if err != nil {
 			return errs.Wrap(err)
