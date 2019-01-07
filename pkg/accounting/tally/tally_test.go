@@ -14,6 +14,7 @@ import (
 
 	"storj.io/storj/internal/testcontext"
 	"storj.io/storj/internal/testidentity"
+	"storj.io/storj/internal/teststorj"
 	"storj.io/storj/pkg/bwagreement"
 	"storj.io/storj/pkg/bwagreement/test"
 	"storj.io/storj/pkg/overlay"
@@ -78,7 +79,7 @@ func makeBWA(ctx context.Context, t *testing.T, bwDb bwagreement.DB, k *ecdsa.Pr
 	//generate an agreement with the key
 	pba, err := test.GeneratePayerBandwidthAllocation(action, k, k)
 	assert.NoError(t, err)
-	rba, err := test.GenerateRenterBandwidthAllocation(pba, k)
+	rba, err := test.GenerateRenterBandwidthAllocation(pba, teststorj.NodeIDFromString("StorageNodeID"), k)
 	assert.NoError(t, err)
 	//save to db
 	err = bwDb.CreateAgreement(ctx, bwagreement.Agreement{Signature: rba.GetSignature(), Agreement: rba.GetData()})
