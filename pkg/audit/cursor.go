@@ -75,7 +75,7 @@ func (cursor *Cursor) NextStripe(ctx context.Context) (stripe *Stripe, err error
 	}
 
 	// get pointer info
-	pointer, _, pba, err := cursor.pointers.Get(ctx, path)
+	pointer, _, pba, authorization, err := cursor.pointers.Get(ctx, path)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,6 @@ func (cursor *Cursor) NextStripe(ctx context.Context) (stripe *Stripe, err error
 		return nil, err
 	}
 
-	authorization := cursor.pointers.SignedMessage()
 	return &Stripe{Index: index, Segment: pointer, PBA: pba, Authorization: authorization}, nil
 }
 

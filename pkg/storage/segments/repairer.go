@@ -33,7 +33,7 @@ func (s *Repairer) Repair(ctx context.Context, path storj.Path, lostPieces []int
 	defer mon.Task()(&ctx)(&err)
 
 	// Read the segment's pointer's info from the PointerDB
-	pr, originalNodes, pba, err := s.pdb.Get(ctx, path)
+	pr, originalNodes, pba, signedMessage, err := s.pdb.Get(ctx, path)
 	if err != nil {
 		return Error.Wrap(err)
 	}
@@ -116,8 +116,6 @@ func (s *Repairer) Repair(ctx context.Context, path storj.Path, lostPieces []int
 	if err != nil {
 		return Error.Wrap(err)
 	}
-
-	signedMessage := s.pdb.SignedMessage()
 
 	// Download the segment using just the healthyNodes
 	rr, err := s.ec.Get(ctx, healthyNodes, rs, pid, pr.GetSegmentSize(), pba, signedMessage)
