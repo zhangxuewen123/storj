@@ -66,7 +66,6 @@ func TestSameSerialNumberBandwidthAgreements(t *testing.T) {
 		rbaNode1, err = GenerateRenterBandwidthAllocation(pbaFile1, teststorj.NodeIDFromString("Storage node 1"), uplinkPrivKey)
 		assert.NoError(t, err)
 
-		//TODO: return custom error message in the event of "UNIQUE constraint failed..."
 		reply, err = server.BandwidthAgreements(ctx, rbaNode1)
 		assert.EqualError(t, err, "bwagreement error: SerialNumber already exist in the PayerBandwidthAllocation")
 		assert.Equal(t, pb.AgreementsSummary_FAIL, reply.Status)
@@ -80,10 +79,8 @@ func TestSameSerialNumberBandwidthAgreements(t *testing.T) {
 	})
 }
 
-func TestInvalidBandwidthAgreements(t *testing.T) {
+func TestManipulatedBandwidthAgreements(t *testing.T) {
 	satellitedbtest.Run(t, func(t *testing.T, db satellite.DB) {
-		/* Todo: Add more tests for bwagreement manipulations
-
 		ctx := testcontext.New(t)
 		defer ctx.Cleanup()
 
@@ -96,22 +93,44 @@ func TestInvalidBandwidthAgreements(t *testing.T) {
 		rba, err := GenerateRenterBandwidthAllocation(pba, teststorj.NodeIDFromString("Storage node 1"), uplinkPrivKey)
 		assert.NoError(t, err)
 
-		Make sure the bwagreement we are using as bluleprint is valid and avoid false positives that way.
+		/* Make sure the bwagreement we are using as bluleprint is valid and avoid false positives that way. */
 		reply, err := server.BandwidthAgreements(ctx, rba)
 		assert.NoError(t, err)
 		assert.Equal(t, pb.AgreementsSummary_OK, reply.Status)
-		*/
 
 		/* copy and unmarshal pba and rba to manipulate it without overwriting it */
 
 		/* manipulate PayerBandwidthAllocation -> invalid signature */
 
 		/* self signed. Storage node sends a self signed bwagreement to get a higher payout */
+	})
+}
 
-		/* malicious storage node would like to force a crash */
+func TestInvalidBandwidthAgreements(t *testing.T) {
+	satellitedbtest.Run(t, func(t *testing.T, db satellite.DB) {
+		ctx := testcontext.New(t)
+		defer ctx.Cleanup()
 
-		/* corrupted signature. Storage node sends an corrupted signuature to force a satellite crash */
+		satellitePubKey, satellitePrivKey, uplinkPrivKey := generateKeys(ctx, t)
+		server := bwagreement.NewServer(db.BandwidthAgreement(), zap.NewNop(), satellitePubKey)
 
+		pba, err := GeneratePayerBandwidthAllocation(pb.PayerBandwidthAllocation_GET, satellitePrivKey, uplinkPrivKey)
+		assert.NoError(t, err)
+
+		rba, err := GenerateRenterBandwidthAllocation(pba, teststorj.NodeIDFromString("Storage node 1"), uplinkPrivKey)
+		assert.NoError(t, err)
+
+		/* Make sure the bwagreement we are using as bluleprint is valid and avoid false positives that way. */
+		reply, err := server.BandwidthAgreements(ctx, rba)
+		assert.NoError(t, err)
+		assert.Equal(t, pb.AgreementsSummary_OK, reply.Status)
+
+		/* Storage node sends an corrupted signuature to force a satellite crash */
+		rba.Signature = []byte("invalid")
+
+		reply, err = server.BandwidthAgreements(ctx, rba)
+		assert.EqualError(t, err, "ToDo: don't crash and return an good error")
+		assert.Equal(t, pb.AgreementsSummary_FAIL, reply.Status)
 	})
 }
 
